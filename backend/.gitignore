@@ -1,0 +1,6 @@
+repo_data/
+__pycache__/
+venv/
+*.pyc
+*.log
+repo_documentation.md

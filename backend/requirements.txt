@@ -1,0 +1,6 @@
+flask
+pyyaml
+flask-cors
+ruamel.yaml
+apscheduler
+google-generativeai

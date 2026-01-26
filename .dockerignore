@@ -1,0 +1,17 @@
+# Exclude large/sensitive directories from build context
+backend/repo_data/
+repo_data/
+backend/venv/
+venv/
+backend/__pycache__/
+__pycache__/
+.git/
+.gitignore
+.dockerignore
+.DS_Store
+*.log
+backend/*.log
+backend/repo_documentation.md
+frontend/node_modules/
+frontend/dist/
+frontend/.DS_Store
