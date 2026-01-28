@@ -7,7 +7,8 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import axios from 'axios';
-import { Send, MessageSquare, Info, Copy, X, Settings, Grid, Layout, Palette, RotateCcw, ChevronDown, ChevronRight, List } from 'lucide-react';
+import dagre from 'dagre';
+import { Send, MessageSquare, Info, Copy, X, Settings, Grid, Layout, Palette, RotateCcw, ChevronDown, ChevronRight, List, Share2, ArrowRight, ArrowDown } from 'lucide-react';
 
 const API_BASE = 'http://localhost:5001/api';
 
@@ -56,6 +57,8 @@ export default function App() {
   // Descendant Highlighting
   const [highlightedDescendants, setHighlightedDescendants] = useState(new Set());
   const [showDescendantList, setShowDescendantList] = useState(false);
+  const [layoutMode, setLayoutMode] = useState('grid'); // 'grid' | 'tree'
+  const [layoutDirection, setLayoutDirection] = useState('TB'); // 'TB' | 'LR'
 
   // Color configuration
   const DEFAULT_COLORS = {
@@ -125,6 +128,46 @@ export default function App() {
       setAiEnabled(false);
     }
   };
+
+  const getLayoutedElements = useCallback((nodes, edges, direction = 'LR') => {
+    const dagreGraph = new dagre.graphlib.Graph();
+    dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+    // Check node dimensions based on current size setting
+    const { width } = NODE_STYLES[nodeSize];
+    const height = 50; // Approximated height
+
+    dagreGraph.setGraph({ rankdir: direction, nodesep: 50, ranksep: 50 });
+
+    nodes.forEach((node) => {
+      dagreGraph.setNode(node.id, { width, height });
+    });
+
+    edges.forEach((edge) => {
+      dagreGraph.setEdge(edge.source, edge.target);
+    });
+
+    dagre.layout(dagreGraph);
+
+    const layoutedNodes = nodes.map((node) => {
+      const nodeWithPosition = dagreGraph.node(node.id);
+
+      // We are shifting the dagre node position (anchor=center center) to the top left
+      // so it matches the React Flow node anchor point (top left).
+      return {
+        ...node,
+        targetPosition: direction === 'LR' ? 'left' : 'top',
+        sourcePosition: direction === 'LR' ? 'right' : 'bottom',
+        position: {
+          x: nodeWithPosition.x - width / 2,
+          y: nodeWithPosition.y - height / 2,
+        },
+        style: { ...node.style, width, fontSize: NODE_STYLES[nodeSize].fontSize },
+      };
+    });
+
+    return { nodes: layoutedNodes, edges };
+  }, [nodeSize]);
 
   const handleJobClick = (jobName) => {
     const jobNode = originalNodes.find(n => n.data.details.name === jobName);
@@ -302,19 +345,34 @@ export default function App() {
     const { width, fontSize, spacingX, spacingY } = NODE_STYLES[nodeSize];
 
     if (!searchQuery && highlightedDescendants.size === 0) {
-      // Calculate columns based on current window/sidebar state
-      const availableWidth = windowSize.width - sidebarWidth - 100;
-      const columns = Math.max(1, Math.floor(availableWidth / spacingX));
+      if (layoutMode === 'tree') {
+        // Tree layout for all nodes
+        // Need to ensure nodes have dimensions for dagre
+        const nodesForDagre = originalNodes.map(node => ({
+          ...node,
+          style: { ...node.style, width, fontSize }
+        }));
+        // FIX: Pass originalEdges instead of newEdges (which was empty)
+        const layouted = getLayoutedElements(nodesForDagre, originalEdges, layoutDirection);
+        newNodes = layouted.nodes;
+        newEdges = layouted.edges;
+      } else {
+        // Grid layout
+        const availableWidth = windowSize.width - sidebarWidth - 100;
+        const columns = Math.max(1, Math.floor(availableWidth / spacingX));
 
-      newNodes = originalNodes.map((node, index) => ({
-        ...node,
-        style: { ...node.style, width, fontSize },
-        position: {
-          x: 100 + (index % columns) * spacingX,
-          y: 100 + Math.floor(index / columns) * spacingY
-        }
-      }));
-      newEdges = originalEdges;
+        newNodes = originalNodes.map((node, index) => ({
+          ...node,
+          style: { ...node.style, width, fontSize },
+          sourcePosition: undefined,
+          targetPosition: undefined,
+          position: {
+            x: 100 + (index % columns) * spacingX,
+            y: 100 + Math.floor(index / columns) * spacingY
+          }
+        }));
+        newEdges = originalEdges;
+      }
     } else {
       // Filter (Search OR Descendants view)
       const filteredRaw = originalNodes.filter(node => {
@@ -332,24 +390,40 @@ export default function App() {
         }
       });
 
-      // Compact Layout for filtered results
-      const availableWidth = windowSize.width - sidebarWidth - 100;
-      const columns = Math.max(1, Math.floor(availableWidth / spacingX));
-
-      newNodes = filteredRaw.map((node, index) => ({
-        ...node,
-        style: { ...node.style, width, fontSize },
-        position: {
-          x: 100 + (index % columns) * spacingX,
-          y: 100 + Math.floor(index / columns) * spacingY
-        }
-      }));
-
-      newEdges = originalEdges.filter(edge => {
-        const sourceExists = newNodes.some(n => n.id === edge.source);
-        const targetExists = newNodes.some(n => n.id === edge.target);
+      // Filter Edges First
+      const filteredEdges = originalEdges.filter(edge => {
+        const sourceExists = filteredRaw.some(n => n.id === edge.source);
+        const targetExists = filteredRaw.some(n => n.id === edge.target);
         return sourceExists && targetExists;
       });
+
+      if (layoutMode === 'tree') {
+        // Prepare nodes for dagre
+        const nodesForDagre = filteredRaw.map(node => ({
+          ...node,
+          style: { ...node.style, width, fontSize }
+        }));
+        const layouted = getLayoutedElements(nodesForDagre, filteredEdges, layoutDirection);
+        newNodes = layouted.nodes;
+        newEdges = layouted.edges;
+      } else {
+        // Grid Layout
+        // Compact Layout for filtered results
+        const availableWidth = windowSize.width - sidebarWidth - 100;
+        const columns = Math.max(1, Math.floor(availableWidth / spacingX));
+
+        newNodes = filteredRaw.map((node, index) => ({
+          ...node,
+          style: { ...node.style, width, fontSize },
+          sourcePosition: undefined,
+          targetPosition: undefined,
+          position: {
+            x: 100 + (index % columns) * spacingX,
+            y: 100 + Math.floor(index / columns) * spacingY
+          }
+        }));
+        newEdges = filteredEdges;
+      }
     }
 
     // Apply Leaf Styling (Global) - using colorConfig
@@ -454,7 +528,7 @@ export default function App() {
     setNodes(newNodes);
     setEdges(newEdges);
 
-  }, [searchQuery, originalNodes, originalEdges, windowSize, selectedJob, sidebarWidth, nodeSize, setNodes, setEdges, colorConfig, highlightedDescendants]);
+  }, [searchQuery, originalNodes, originalEdges, windowSize, selectedJob, sidebarWidth, nodeSize, setNodes, setEdges, colorConfig, highlightedDescendants, layoutMode, getLayoutedElements, layoutDirection]);
 
   // Auto-Zoom to selected node
   useEffect(() => {
@@ -505,6 +579,40 @@ export default function App() {
                 <option value="medium">Medium</option>
                 <option value="big">Big</option>
               </select>
+            </div>
+
+            <div className="flex items-center gap-2 bg-white border border-gray-300 rounded px-2 py-1.5 shadow-sm">
+              <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                <Layout size={14} /> Layout:
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setLayoutMode('grid')}
+                  className={`p-1 rounded ${layoutMode === 'grid' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'}`}
+                  title="Grid View"
+                >
+                  <Grid size={16} />
+                </button>
+                <button
+                  onClick={() => setLayoutMode('tree')}
+                  className={`p-1 rounded ${layoutMode === 'tree' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:bg-gray-100'}`}
+                  title="Tree View"
+                >
+                  <Share2 size={16} style={{ transform: 'rotate(90deg)' }} />
+                </button>
+                {layoutMode === 'tree' && (
+                  <>
+                    <div className="h-4 w-px bg-gray-300 mx-1"></div>
+                    <button
+                      onClick={() => setLayoutDirection(d => d === 'TB' ? 'LR' : 'TB')}
+                      className="p-1 rounded text-gray-500 hover:bg-gray-100"
+                      title={layoutDirection === 'TB' ? "Switch to Horizontal Layout" : "Switch to Vertical Layout"}
+                    >
+                      {layoutDirection === 'TB' ? <ArrowDown size={16} /> : <ArrowRight size={16} />}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             <button
