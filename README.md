@@ -41,12 +41,14 @@ This application includes a `Containerfile` for building a single container imag
 
 ### Building the Image
 
+You can configure the backend API URL that the frontend connects to by passing the `VITE_API_BASE` build argument. If omitted, it defaults to `http://localhost:5001/api`.
+
 ```bash
 # Using Podman
-podman build -t zuul-visualizer .
+podman build --build-arg VITE_API_BASE=http://your-server:5001/api -t zuul-visualizer .
 
 # Using Docker
-docker build -t zuul-visualizer .
+docker build --build-arg VITE_API_BASE=http://your-server:5001/api -t zuul-visualizer .
 ```
 
 ### Running the Container
