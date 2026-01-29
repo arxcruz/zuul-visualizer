@@ -1044,7 +1044,7 @@ export default function App() {
               {nodes.length === 0 ? (
                 <p className="text-gray-400 text-sm">No jobs found matching "{searchQuery}"</p>
               ) : (
-                nodes.map(node => (
+                [...nodes].sort((a, b) => a.id.localeCompare(b.id)).map(node => (
                   <div
                     key={node.id}
                     onClick={() => {

@@ -27,6 +27,15 @@ def resolve_project_paths(sources):
     if isinstance(sources, str):
         sources = [sources]
 
+    # Remove duplicates from sources while preserving order
+    seen_sources = set()
+    unique_sources = []
+    for s in sources:
+        if s not in seen_sources:
+            unique_sources.append(s)
+            seen_sources.add(s)
+    sources = unique_sources
+
     # Get clone directory from config
     config = load_config()
     clone_base_dir = config.get('clone_dir', 'repo_data')
@@ -203,8 +212,8 @@ def load_repo():
         
         if not exists:
             parser.project_infos.append(new_info)
-            # Add to scheduler too
-            scheduler.project_infos.append(new_info)
+            # scheduler.project_infos is the same list object as parser.project_infos
+            # so we only need to append once to update both.
             
         parser.parse()
         
@@ -266,9 +275,12 @@ def clear_graph():
                 except Exception as e:
                     print(f"Failed to delete {path}: {e}")
 
-    # Clear all paths from memory
-    parser.project_infos = []
-    scheduler.project_infos = []
+    # Clear all paths from memory while maintaining shared reference if they are the same
+    if parser.project_infos is scheduler.project_infos:
+        parser.project_infos.clear()
+    else:
+        parser.project_infos = []
+        scheduler.project_infos = []
     
     parser.jobs = {}
     parser.cached_data = None
