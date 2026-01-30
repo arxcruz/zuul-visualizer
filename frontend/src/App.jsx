@@ -53,6 +53,12 @@ export default function App() {
   });
   const [activeRepos, setActiveRepos] = useState([]);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
   // Descendant Highlighting
   const [highlightedDescendants, setHighlightedDescendants] = useState(new Set());
@@ -173,6 +179,8 @@ export default function App() {
     const jobNode = originalNodes.find(n => n.data.details.name === jobName);
     if (jobNode) {
       setSelectedJob(jobNode.data.details);
+    } else {
+      showToast(`Job "${jobName}" is not defined in the current graph (it likely belongs to an external repository).`, 'warning');
     }
   };
 
@@ -700,6 +708,19 @@ export default function App() {
           </div>
         )}
 
+        {/* Toast Notification */}
+        {toast && (
+          <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 duration-300">
+            <div className={`px-4 py-2 rounded-lg shadow-lg text-white flex items-center gap-2 ${toast.type === 'warning' ? 'bg-orange-500' : 'bg-indigo-600'}`}>
+              <Info size={18} />
+              <span className="text-sm font-medium">{toast.message}</span>
+              <button onClick={() => setToast(null)} className="ml-2 hover:bg-white/20 p-0.5 rounded-full">
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Floating Chat Button */}
         {aiEnabled && (
           <button
@@ -793,12 +814,19 @@ export default function App() {
                   <span className="font-semibold text-sm text-gray-500 uppercase">Parent</span>
                   <div className="mt-1 font-mono text-sm bg-gray-100 p-2 rounded-sm">
                     {selectedJob.parent ? (
-                      <button
-                        onClick={() => handleJobClick(selectedJob.parent)}
-                        className="text-indigo-600 hover:text-indigo-800 hover:underline text-left"
-                      >
-                        {selectedJob.parent}
-                      </button>
+                      (() => {
+                        const isParentInGraph = originalNodes.some(n => n.data.details.name === selectedJob.parent);
+                        return (
+                          <button
+                            onClick={() => handleJobClick(selectedJob.parent)}
+                            className={`${isParentInGraph ? "text-indigo-600 hover:text-indigo-800" : "text-gray-500 hover:text-gray-700"} hover:underline text-left flex items-center gap-2`}
+                            title={isParentInGraph ? `Go to ${selectedJob.parent}` : "Job defined in external repository"}
+                          >
+                            {selectedJob.parent}
+                            {!isParentInGraph && <span className="text-[10px] border border-gray-400 rounded-sm px-1 text-gray-500 bg-gray-200">External</span>}
+                          </button>
+                        );
+                      })()
                     ) : 'None'}
                   </div>
                 </div>
@@ -1170,9 +1198,19 @@ export default function App() {
                     <ul className="space-y-1">
                       {activeRepos.map((repo, idx) => {
                         const url = typeof repo === 'object' ? repo.url : repo;
-                        const name = url ? url.split('/').pop().replace('.git', '') : 'Unknown Local Path';
+                        const name = url
+                          ? url
+                            .split('/')
+                            .filter(Boolean)
+                            .pop()
+                            .replace('.git', '')
+                          : 'Unknown Local Path';
                         return (
-                          <li key={idx} className="text-xs text-indigo-800 flex items-center gap-2 break-all" title={url}>
+                          <li
+                            key={idx}
+                            className="text-xs text-indigo-800 flex items-center gap-2 break-all"
+                            title={url}
+                          >
                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
                             {name}
                           </li>
